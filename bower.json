@@ -1,0 +1,28 @@
+{
+  "name": "swank",
+  "homepage": "https://github.com/BxnIO/swank",
+  "authors": [
+    "Mark Litchfield <mlitchfield@timerazor.com>"
+  ],
+  "description": "Swank - OpenAPI (Swagger) document parser, validator, object factory library for Angular 1.5+.",
+  "main": "swank.js",
+  "keywords": [
+    "swagger",
+    "openapi",
+    "angular"
+  ],
+  "license": "MIT",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "angular": "^1.5.8",
+    "angular-sanitize": "^1.5.8",
+    "lodash": "^4.15.0"
+  }
+}
