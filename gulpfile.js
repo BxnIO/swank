@@ -21,10 +21,6 @@ gulp.task('build', ['clean'], function() {
     .pipe(gulp.dest('dist/'));
 });
 
-gulp.task('watch', function() {
-  gulp.watch(['gulpfile.js','src/**/*.*'], ['build']);
-});
-
-gulp.task('dev', ['watch'], function() {
-  return;
+gulp.task('dev', function() {
+  return gulp.watch(['gulpfile.js','src/**/*.*'], ['build']);
 });
