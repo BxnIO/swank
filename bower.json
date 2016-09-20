@@ -5,6 +5,7 @@
     "Mark Litchfield <mlitchfield@timerazor.com>"
   ],
   "description": "Swank - OpenAPI (Swagger) document parser, validator, object factory library for Angular 1.5+.",
+  "version": "0.0.1",
   "main": "swank.js",
   "keywords": [
     "swagger",
