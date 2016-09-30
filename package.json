@@ -20,7 +20,7 @@
     "openapi",
     "angular"
   ],
-  "author": "Mark Litchfield <mlitchfield@timerazor.com>",
+  "author": "Mark Litchfield <m@bxn.io>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/BxnIO/swank/issues"
