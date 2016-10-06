@@ -1,4 +1,4 @@
-/* globals _, ZSchema */
+/* globals _, ZSchema, valuesByKey */
 /**
  * Swank - An Angular 1.5+ OpenAPI (Swagger) parser, validator and object
  *         factory.
@@ -25,14 +25,20 @@
    * @param   {Object} $q       Angular Promise service
    * @returns {Object}          A parsed and validated Swank object
    */
-  function SwankFactory($log, $http, $q) {
+  function SwankFactory($log, $http, $q, $rootScope, SwankPaths) {
     /**
      * Default Swank model
      * @type {Object}
      */
     var swankModel = {
       errors: [], // Collection of validation errors
-      doc: {}
+      doc: {},
+      objects: {
+        tagnames: []
+      },
+      options: {
+        orderPaths: 'tag'
+      }
     };
     /**
      * Swank Constructor method
@@ -40,7 +46,7 @@
      * @param {Object} swagger Swagger JSON to parse and validate
      */
     function Swank(swagger) {
-      var _self = angular.merge(this, swankModel);
+      var _self = angular.extend(this, swankModel);
       try {
         if (swagger) {
           var doc = _self.load(swagger);
@@ -63,6 +69,8 @@
               _self.errors = (!result) ? validator.getLastErrors() : [];
               _self.doc = data;
               _self.logErrors();
+              _self.parse();
+              $rootScope.$broadcast('swankloaded');
             });
           });
         } else {
@@ -138,10 +146,60 @@
         );
       });
     };
+    /**
+     * Parses the validated document into a collection functional objects and 
+     * functional object collections. These objects will expose properties and 
+     * methods useful at the template / component level.
+     */
+    Swank.prototype.parse = function() {
+      var _self = this;
+
+      // Get tag names
+      _self.objects.tags = _self.doc.tags || {};
+      if (_.isObject(_self.doc.tags)) {
+        _self.objects.tagnames = _.uniq(_.map(_self.doc.tags, function(tag) {
+          return tag.name;
+        }));
+      } else {
+        _self.objects.tagnames = valuesByKey(_self.doc.paths, 'tags') || [];
+      }
+
+      // Parse paths collection into funtional objects
+      angular.extend(_self.objects, new SwankPaths(_self.doc.paths, _self.options));
+    };
+    /**
+     * Sets the default ordering / grouping of paths. Currently, the options for
+     * ordering include by 'tag', 'route' or 'method'.
+     *
+     * Grouping by 'tag' will group all paths and path items by tags associated
+     * with each. If a path has multiple tags associated, it will be present in 
+     * each collection. If a path has no tag associated, it will be grouped in 
+     * an 'untagged' collection.
+     *
+     * Grouping by 'route' will group all paths and path items in the standard 
+     * order.
+     *
+     * Grouping by 'method' will group all paths and path items in collections 
+     * by the HTTP Method or Operation. All grouped paths and path items will 
+     * have their route as the default key under the method collections.
+     * 
+     * @param  {String} by Grouping method. 'route', 'method', 'tag'. Default
+     *                     is 'tag'.
+     */
+    Swank.prototype.groupPaths = function(by) {
+      var _self = this;
+      var validOrders = ['route', 'method', 'tag'];
+      if (by && validOrders.indexOf(by) !== -1) {
+        _self.options.orderPaths = by;
+        angular.extend(_self.objects, new SwankPaths(_self.doc.paths, _self.options));
+      } else {
+        $log.warn('Invalid group-by option for Swank.');
+      }
+    };
 
     return Swank;
   }
-  SwankFactory.$inject = ['$log', '$http', '$q'];
+  SwankFactory.$inject = ['$log', '$http', '$q', '$rootScope', 'SwankPaths'];
 
   /**
    * Define our module
@@ -149,17 +207,118 @@
   angular.module('swank', []).factory('Swank', SwankFactory);
 })(angular);
 
+/* globals _ */
+'use strict';
+/**
+ * Returns a list of values by key.
+ * @param  {Object} tree    Object to search
+ * @param  {String} key     Key to search for
+ * @param  {Array}  results Collector
+ * @return {Array}          Collection of values matched by key
+ */
+function valuesByKey(tree, key, results) {
+  results = results || [];
+  return _.uniq(_.flatten(_.map(tree, function(child) {
+    if (child[key]) {
+      _.forEach(child[key], function(c) { results.push(c); });
+    }
+    return (_.isObject(child) && !_.isArray(child)) ?
+      valuesByKey(child, key, results) :
+      results;
+  })));
+}
 (function(angular) {
   'use strict';
 
-  function SwankPathFactory() {
-    function SwankPath(route, pathObject) {
-      return angular.merge(this, pathObject || {});
+  function SwankOperationFactory() {
+    function SwankOperation(op, opObject) {
+      var _self = angular.extend(this, {});
     }
+
+    return SwankOperation;
+  }
+
+  angular.module('swank').factory('SwankOperation', SwankOperationFactory);
+})(angular);
+(function(angular) {
+  'use strict';
+
+  function SwankPathFactory(SwankOperation) {
+    function SwankPath(pathObject) {
+      var _self = angular.extend(this, pathObject || {});
+      return _self;
+    }
+
+    SwankPath.prototype.parse = function() {
+      var _self = this;
+      
+    };
 
     return SwankPath;
   }
-  SwankPathFactory.$inject = [];
+  SwankPathFactory.$inject = ['SwankOperation'];
 
   angular.module('swank').factory('SwankPath', SwankPathFactory);
+})(angular);
+(function(angular) {
+  'use strict';
+
+  function SwankPathsFactory(SwankPath) {
+    function SwankPaths(paths, options) {
+      var _self = angular.extend(this, {
+        paths: {}
+      });
+      if (options.orderPaths === 'route') {
+        _self.byRoute(paths);
+      }
+      if (options.orderPaths === 'method') {
+        _self.byMethod(paths);
+      }
+      if (options.orderPaths === 'tag') {
+        _self.byTag(paths, options.tags);
+      }
+      return _self;
+    }
+
+    SwankPaths.prototype.byRoute = function(paths) {
+      var _self = this;
+      _.forEach(paths, function(path, route) {
+        _self.paths[route] = new SwankPath(path);
+      });
+    };
+
+    SwankPaths.prototype.byMethod = function(paths) {
+      var _self = this;
+      _self.paths = {
+        get:{}, put:{}, post:{}, delete:{}, options:{}, head:{}, patch:{}
+      };
+      _.forEach(paths, function(path, route) {
+        _.forEach(path, function(details, method) {
+          _self.paths[method][route] = details;
+        });
+      });
+    };
+
+    SwankPaths.prototype.byTag = function(paths, tags) {
+      var _self = this;
+      if (tags) {
+        _.forEach(tags, function(tag) { _self.paths[tag] = {}; });
+      }
+      _self.paths.untagged = {};
+      _.forEach(paths, function(path, route) {
+        _.forEach(path, function(details, method) {
+          var t = (details.tags) ? details.tags : 'untagged';
+          _.forEach(t, function(tag) {
+            _self.paths[tag] = _self.paths[tag] || {};
+            _self.paths[tag][route] = details;
+          });
+        });
+      });
+    };
+
+    return SwankPaths;
+  }
+  SwankPathsFactory.$inject = ['SwankPath'];
+
+  angular.module('swank').factory('SwankPaths', SwankPathsFactory);
 })(angular);

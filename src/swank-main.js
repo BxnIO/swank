@@ -1,4 +1,4 @@
-/* globals _, ZSchema */
+/* globals _, ZSchema, valuesByKey */
 /**
  * Swank - An Angular 1.5+ OpenAPI (Swagger) parser, validator and object
  *         factory.
@@ -25,14 +25,20 @@
    * @param   {Object} $q       Angular Promise service
    * @returns {Object}          A parsed and validated Swank object
    */
-  function SwankFactory($log, $http, $q) {
+  function SwankFactory($log, $http, $q, $rootScope, SwankPaths) {
     /**
      * Default Swank model
      * @type {Object}
      */
     var swankModel = {
       errors: [], // Collection of validation errors
-      doc: {}
+      doc: {},
+      objects: {
+        tagnames: []
+      },
+      options: {
+        orderPaths: 'tag'
+      }
     };
     /**
      * Swank Constructor method
@@ -40,7 +46,7 @@
      * @param {Object} swagger Swagger JSON to parse and validate
      */
     function Swank(swagger) {
-      var _self = angular.merge(this, swankModel);
+      var _self = angular.extend(this, swankModel);
       try {
         if (swagger) {
           var doc = _self.load(swagger);
@@ -63,6 +69,8 @@
               _self.errors = (!result) ? validator.getLastErrors() : [];
               _self.doc = data;
               _self.logErrors();
+              _self.parse();
+              $rootScope.$broadcast('swankloaded');
             });
           });
         } else {
@@ -138,10 +146,60 @@
         );
       });
     };
+    /**
+     * Parses the validated document into a collection functional objects and 
+     * functional object collections. These objects will expose properties and 
+     * methods useful at the template / component level.
+     */
+    Swank.prototype.parse = function() {
+      var _self = this;
+
+      // Get tag names
+      _self.objects.tags = _self.doc.tags || {};
+      if (_.isObject(_self.doc.tags)) {
+        _self.objects.tagnames = _.uniq(_.map(_self.doc.tags, function(tag) {
+          return tag.name;
+        }));
+      } else {
+        _self.objects.tagnames = valuesByKey(_self.doc.paths, 'tags') || [];
+      }
+
+      // Parse paths collection into funtional objects
+      angular.extend(_self.objects, new SwankPaths(_self.doc.paths, _self.options));
+    };
+    /**
+     * Sets the default ordering / grouping of paths. Currently, the options for
+     * ordering include by 'tag', 'route' or 'method'.
+     *
+     * Grouping by 'tag' will group all paths and path items by tags associated
+     * with each. If a path has multiple tags associated, it will be present in 
+     * each collection. If a path has no tag associated, it will be grouped in 
+     * an 'untagged' collection.
+     *
+     * Grouping by 'route' will group all paths and path items in the standard 
+     * order.
+     *
+     * Grouping by 'method' will group all paths and path items in collections 
+     * by the HTTP Method or Operation. All grouped paths and path items will 
+     * have their route as the default key under the method collections.
+     * 
+     * @param  {String} by Grouping method. 'route', 'method', 'tag'. Default
+     *                     is 'tag'.
+     */
+    Swank.prototype.groupPaths = function(by) {
+      var _self = this;
+      var validOrders = ['route', 'method', 'tag'];
+      if (by && validOrders.indexOf(by) !== -1) {
+        _self.options.orderPaths = by;
+        angular.extend(_self.objects, new SwankPaths(_self.doc.paths, _self.options));
+      } else {
+        $log.warn('Invalid group-by option for Swank.');
+      }
+    };
 
     return Swank;
   }
-  SwankFactory.$inject = ['$log', '$http', '$q'];
+  SwankFactory.$inject = ['$log', '$http', '$q', '$rootScope', 'SwankPaths'];
 
   /**
    * Define our module

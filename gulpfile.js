@@ -9,11 +9,11 @@ var gulp = require('gulp'),
 var sources = ['src/swank-main.js','src/**/*.js'];
 
 gulp.task('clean', function() {
-  return del(['dist/*']);
+  del(['dist/*']);
 });
 
 gulp.task('build', ['clean'], function() {
-  return gulp.src(sources)
+  gulp.src(sources)
     .pipe(concat('swank.js'))
     .pipe(gulp.dest('dist/'))
     .pipe(rename('swank.min.js'))
@@ -22,5 +22,5 @@ gulp.task('build', ['clean'], function() {
 });
 
 gulp.task('dev', function() {
-  return gulp.watch(['gulpfile.js','src/**/*.*'], ['build']);
+  gulp.watch(sources, ['build']);
 });
