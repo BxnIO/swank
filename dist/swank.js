@@ -294,7 +294,8 @@ function valuesByKey(tree, key, results) {
       };
       _.forEach(paths, function(path, route) {
         _.forEach(path, function(details, method) {
-          _self.paths[method][route] = details;
+          _self.paths[method][route] = _self.paths[method][route] || {};
+          _self.paths[method][route][method] = details;
         });
       });
     };
@@ -310,7 +311,8 @@ function valuesByKey(tree, key, results) {
           var t = (details.tags) ? details.tags : 'untagged';
           _.forEach(t, function(tag) {
             _self.paths[tag] = _self.paths[tag] || {};
-            _self.paths[tag][route] = details;
+            _self.paths[tag][route] = _self.paths[tag][route] || {};
+            _self.paths[tag][route][method] = details;
           });
         });
       });
