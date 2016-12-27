@@ -5,7 +5,7 @@
     "Mark Litchfield <m@bxn.io>"
   ],
   "description": "Swank - OpenAPI (Swagger) document parser, validator, object factory library for Angular 1.5+.",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "main": "dist/swank.js",
   "keywords": [
     "swagger",
