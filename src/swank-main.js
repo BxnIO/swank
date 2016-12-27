@@ -40,19 +40,19 @@
   LoDashFactory.$inject = ['$window', '$log'];
 
   /**
-   * Tests to ensure that YAMLJS available.
+   * Tests to ensure that JS-YAML available.
    */
-  function YamlJSFactory($window, $log) {
+  function JSYAMLFactory($window, $log) {
     try {
-      if (!$window.YAML) {
-        throw new Error('YAMLJS library not found');
+      if (!$window.jsyaml) {
+        throw new Error('JS-YAML library not found');
       }
-      return $window.YAML;
+      return $window.jsyaml;
     } catch (err) {
       $log.error(err);
     }
   }
-  YamlJSFactory.$inject = ['$window', '$log'];
+  JSYAMLFactory.$inject = ['$window', '$log'];
 
   /**
    * Tests to ensure that Showdown available.
@@ -95,7 +95,7 @@
   }
   SwankParseMDFilter.$inject = ['$log'];
 
-  function SwankFactory($log, $http, $q, $rootScope, Helpers) {
+  function SwankFactory($log, $http, $q, $rootScope, Helpers, jsyaml) {
     /**
      * Default Swank model
      * @type {Object}
@@ -108,30 +108,6 @@
       },
       options: {
         orderPaths: 'tag'
-      }
-    };
-
-    /**
-     * Default Swagger document model
-     * @type {Object}
-     */
-    var swaggerModel = {
-      swagger: '2.0',
-      info: {
-        title: 'New API',
-        version: '1.0'
-      },
-      paths: {
-        '/': {
-          get: {
-            description: 'Returns 200.',
-            responses: {
-              200: {
-                description: 'API is functional.'
-              }
-            }
-          }
-        }
       }
     };
 
@@ -177,10 +153,16 @@
      */
     Swank.prototype.load = function($self, request) {
       var deferred = $q.defer();
+      var isYaml = (_.isString(request) && request.match(/[yaml|yml]$/gi));
+      if (isYaml) {
+        console.log('YAML supplied.');
+      }
       if (_.isString(request) && request.match(/^http/)) {
         $http.get(request)
           .then(function(result) {
-            deferred.resolve({ref: $self, doc: result.data});
+            var json = (isYaml) ? jsyaml.load(result.data) : result.data;
+            console.log(json);
+            deferred.resolve({ref: $self, doc: json});
           }, function(msg, code) {
             $log.error(msg, code);
             deferred.reject(msg);
@@ -189,7 +171,7 @@
         deferred.resolve({ref: $self, doc: request});
       } else {
         try {
-          var json = JSON.parse(request);
+          var json = (isYaml) ? jsyaml.load(request) : JSON.parse(request);
           deferred.resolve({ref: $self, doc: json});
         } catch (e) {
           $log.error('Invalid JSON: ' + e.message.split('in JSON')[0].trim());
@@ -336,7 +318,7 @@
 
     return Swank;
   }
-  SwankFactory.$inject = ['$log', '$http', '$q', '$rootScope', 'Helpers', 'SwankPaths', 'SwankDefinitions'];
+  SwankFactory.$inject = ['$log', '$http', '$q', '$rootScope', 'Helpers', 'jsyaml'];
 
   /**
    * Decorates $q to add a serial promise execution chain.
@@ -409,7 +391,7 @@
       $provide.decorator('$q', qSeriesDecorator);
     }])
     .factory('_', LoDashFactory)
-    .factory('YAML', YamlJSFactory)
+    .factory('jsyaml', JSYAMLFactory)
     .factory('Showdown', ShowdownFactory)
     .filter('parseMD', SwankParseMDFilter)
     .factory('Swank', SwankFactory);

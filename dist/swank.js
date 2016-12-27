@@ -1,4 +1,4 @@
-/* globals _, ZSchema */
+/* globals _, ZSchema, YAML, showdown*/
 /**
  * An Angular 1.5+ OpenAPI (Swagger) parser, validator and object factory.
  *
@@ -24,7 +24,78 @@
     return OPENAPISPEC + v + '/schema.json';
   }
 
-  function SwankFactory($log, $http, $q, $rootScope, Helpers, SwankPaths, SwankDefinitions) {
+  /**
+   * Tests to ensure that Lodash available.
+   */
+  function LoDashFactory($window, $log) {
+    try {
+      if (!$window._) {
+        throw new Error('LoDash library not found');
+      }
+      return $window._;
+    } catch (err) {
+      $log.error(err);
+    }
+  }
+  LoDashFactory.$inject = ['$window', '$log'];
+
+  /**
+   * Tests to ensure that JS-YAML available.
+   */
+  function JSYAMLFactory($window, $log) {
+    try {
+      if (!$window.jsyaml) {
+        throw new Error('JS-YAML library not found');
+      }
+      return $window.jsyaml;
+    } catch (err) {
+      $log.error(err);
+    }
+  }
+  JSYAMLFactory.$inject = ['$window', '$log'];
+
+  /**
+   * Tests to ensure that Showdown available.
+   */
+  function ShowdownFactory($window, $log) {
+    try {
+      if (!$window.showdown) {
+        throw new Error('Showdown library not found');
+      }
+      return $window.showdown;
+    } catch (err) {
+      $log.error(err);
+    }
+  }
+  ShowdownFactory.$inject = ['$window', '$log'];
+
+  /**
+   * Markdown content filter / parser
+   */
+  function SwankParseMDFilter($log) {
+    return function(content) {
+      if (typeof content === 'string') {
+        try {
+          if (!_.isObject(showdown)) {
+            throw new Error('Showdown library not found.');
+          }
+          var converter = new showdown.Converter({
+            ghCodeBlocks: true,
+            tasklists: true,
+            tables: true,
+            omitExtraWLInCodeBlocks: true
+          });
+          return converter.makeHtml(content);
+        } catch (err) {
+          $log.error(err);
+          return;
+        }
+      }
+    };
+  }
+  SwankParseMDFilter.$inject = ['$log'];
+
+  function SwankFactory($log, $http, $q, $rootScope, Helpers, jsyaml) {
     /**
      * Default Swank model
      * @type {Object}
@@ -40,12 +111,15 @@
       }
     };
 
+    /**
+     * Swank Constructor
+     * @param {Mixed}  toLoad  URL or Swagger Object
+     * @param {Object} options Custom parameters for setting up Swank
+     */
     function Swank(toLoad, options) {
-      // Broadcast the loading message to begin with.
       $rootScope.$broadcast('swankloading');
       var _self = angular.extend(this, swankModel);
       angular.merge(_self.options, options || {});
-
       try {
         if (!toLoad || toLoad === null) {
           throw new Error('No document supplied.');
@@ -55,7 +129,6 @@
         $log.error(err);
         return;
       }
-      
       var tasks = [
         // Load the document to validate and parse
         _self.load(_self, toLoad),
@@ -66,13 +139,11 @@
         // Load tags
         _self.loadTags
       ];
-
       $q.series(tasks).then(function(results) {
         $rootScope.$broadcast('swankloaded');
         $log.info(results);
         _self.logErrors();
       });
-
       return _self;
     }
     /**
@@ -82,10 +153,16 @@
      */
     Swank.prototype.load = function($self, request) {
       var deferred = $q.defer();
+      var isYaml = (_.isString(request) && request.match(/[yaml|yml]$/gi));
+      if (isYaml) {
+        console.log('YAML supplied.');
+      }
       if (_.isString(request) && request.match(/^http/)) {
         $http.get(request)
           .then(function(result) {
-            deferred.resolve({ref: $self, doc: result.data});
+            var json = (isYaml) ? jsyaml.load(result.data) : result.data;
+            console.log(json);
+            deferred.resolve({ref: $self, doc: json});
           }, function(msg, code) {
             $log.error(msg, code);
             deferred.reject(msg);
@@ -94,7 +171,7 @@
         deferred.resolve({ref: $self, doc: request});
       } else {
         try {
-          var json = JSON.parse(request);
+          var json = (isYaml) ? jsyaml.load(request) : JSON.parse(request);
           deferred.resolve({ref: $self, doc: json});
         } catch (e) {
           $log.error('Invalid JSON: ' + e.message.split('in JSON')[0].trim());
@@ -241,7 +318,7 @@
 
     return Swank;
   }
-  SwankFactory.$inject = ['$log', '$http', '$q', '$rootScope', 'Helpers', 'SwankPaths', 'SwankDefinitions'];
+  SwankFactory.$inject = ['$log', '$http', '$q', '$rootScope', 'Helpers', 'jsyaml'];
 
   /**
    * Decorates $q to add a serial promise execution chain.
@@ -313,6 +390,10 @@
     .config(['$provide', function ($provide) {
       $provide.decorator('$q', qSeriesDecorator);
     }])
+    .factory('_', LoDashFactory)
+    .factory('jsyaml', JSYAMLFactory)
+    .factory('Showdown', ShowdownFactory)
+    .filter('parseMD', SwankParseMDFilter)
     .factory('Swank', SwankFactory);
 })(angular);
 
