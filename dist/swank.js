@@ -1,4 +1,4 @@
-/* globals _, ZSchema, YAML, showdown*/
+/* globals _, ZSchema, showdown*/
 /**
  * An Angular 1.5+ OpenAPI (Swagger) parser, validator and object factory.
  *
@@ -110,7 +110,12 @@
         orderPaths: 'tag'
       }
     };
-
+    /**
+     * Sanitizes the doc object by removing Angular specific keys from the data.
+     * @param  {Object} doc  Raw Swank doc object
+     * @return {Object}      Sanitized Swagger JSON object
+     */
+    var sanitizeDoc = function(doc) { return angular.fromJson(angular.toJson(doc)); };
     /**
      * Swank Constructor
      * @param {Mixed}  toLoad  URL or Swagger Object
@@ -154,14 +159,10 @@
     Swank.prototype.load = function($self, request) {
       var deferred = $q.defer();
       var isYaml = (_.isString(request) && request.match(/[yaml|yml]$/gi));
-      if (isYaml) {
-        console.log('YAML supplied.');
-      }
       if (_.isString(request) && request.match(/^http/)) {
         $http.get(request)
           .then(function(result) {
             var json = (isYaml) ? jsyaml.load(result.data) : result.data;
-            console.log(json);
             deferred.resolve({ref: $self, doc: json});
           }, function(msg, code) {
             $log.error(msg, code);
@@ -179,6 +180,12 @@
         }
       }
       return deferred.promise;
+    };
+    Swank.prototype.exportYaml = function() {
+      return jsyaml.dump(sanitizeDoc(this.doc));
+    };
+    Swank.prototype.exportJson = function() {
+      return sanitizeDoc(angular.toJson(this.doc));
     };
     /**
      * Fetches the Swagger JSON schema
@@ -228,7 +235,6 @@
       if ($self.errors.length === 0) {
         $self.doc.tags = $self.doc.tags || [];
         if (_.isEmpty($self.doc.tags)) {
-          console.log($self.doc);
           var tags = _.uniq(Helpers.valuesByKey($self.doc.paths, 'tags'));
           $self.doc.tags = _.map(tags, function(tag) {
             return {name:tag};
